@@ -90,18 +90,28 @@ void MixingKnobPluginAudioProcessor::changeProgramName (int index, const String&
 //==============================================================================
 void MixingKnobPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-	processorGraph->setPlayConfigDetails(
-		getMainBusNumInputChannels(),
-		getMainBusNumOutputChannels(), 
-		sampleRate, samplesPerBlock);
-	processorGraph->prepareToPlay(sampleRate, samplesPerBlock);
+	if (usedImpl == impls::GRAPH) {
+		processorGraph->setPlayConfigDetails(
+			getMainBusNumInputChannels(),
+			getMainBusNumOutputChannels(),
+			sampleRate, samplesPerBlock);
+		processorGraph->prepareToPlay(sampleRate, samplesPerBlock);
 
-	initializeGraph();
+		initializeGraph();
+	}
+	else {
+		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer prepareToPlay not impled", "Close");
+	}
 }
 
 void MixingKnobPluginAudioProcessor::releaseResources()
 {
-	processorGraph->releaseResources();
+	if (usedImpl == impls::GRAPH) {
+		processorGraph->releaseResources();
+	}
+	else {
+		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer releaseResources not impled", "Close");
+	}
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -149,7 +159,12 @@ void MixingKnobPluginAudioProcessor::processBlock (AudioBuffer<float>& buffer, M
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
-	processorGraph->processBlock(buffer, midiMessages);
+	if (usedImpl == impls::GRAPH) {
+		processorGraph->processBlock(buffer, midiMessages);
+	}
+	else {
+		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer processBlock not impled", "Close");
+	}
 }
 
 //==============================================================================
@@ -201,36 +216,55 @@ const KnownPluginList& MixingKnobPluginAudioProcessor::getKnownPluginList()
 
 void MixingKnobPluginAudioProcessor::loadPluginWithIndex(int index)
 {
-	if (processorGraph->getNumNodes() > 0) {
-		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Changing loaded plugin not supported", "Close");
-		return;
+	if (usedImpl == impls::GRAPH) {
+		if (processorGraph->getNumNodes() > 0) {
+			AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Changing loaded plugin not supported", "Close");
+			return;
+		}
+	}
+	else {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer loadPluginWithIndex not impled", "Close");
 	}
 }
 
 void MixingKnobPluginAudioProcessor::setGain(double newGainValue)
 {
-	if (newGainValue < 0) newGainValue = 0;
-	if (newGainValue > 100) newGainValue = 100;
-	double val = newGainValue / 50;
-	leftGain->setGain(val);
-	rightGain->setGain(2 - val);
+	if (usedImpl == impls::GRAPH) {
+		if (newGainValue < 0) newGainValue = 0;
+		if (newGainValue > 100) newGainValue = 100;
+		double val = newGainValue / 50;
+		leftGain->setGain(val);
+		rightGain->setGain(2 - val);
+	}
+	else {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer setGain not impled", "Close");
+	}
 }
 
 void MixingKnobPluginAudioProcessor::connect(NodeId in, NodeId out)
 {
-	for (int channel = 0; channel < getMainBusNumInputChannels(); ++channel) {
-		processorGraph->addConnection({
-			{ in, channel },
-			{ out, channel }
-		});
+	if (usedImpl == impls::GRAPH) {
+		for (int channel = 0; channel < getMainBusNumInputChannels(); ++channel) {
+			processorGraph->addConnection({
+				{ in, channel },
+				{ out, channel }
+				});
+		}
+	}
+	else {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer connect not impled", "Close");
 	}
 }
 
 void MixingKnobPluginAudioProcessor::initializeGraph()
 {
+	if (usedImpl != impls::GRAPH) {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer should not use initializeGraph", "Close");
+		return;
+	}
 	processorGraph->clear();//pro jistotu a taky proto, abych to nemohl zapomenout, az budu implementovat zmenu vlozeneho pluginu
 
-							//vytvorim input/output
+	//vytvorim input/output
 	audioInputNode = processorGraph->addNode(new GraphIO(GraphIO::audioInputNode), INPUT);
 	audioOutputNode = processorGraph->addNode(new GraphIO(GraphIO::audioOutputNode), OUTPUT);
 
