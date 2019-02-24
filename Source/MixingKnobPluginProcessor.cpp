@@ -10,6 +10,8 @@
 
 #include "MixingKnobPluginProcessor.h"
 #include "MixingKnobPluginEditor.h"
+#include "GraphMixingImplementation.h"
+#include "MixerMixingImplementation.h"
 
 //==============================================================================
 MixingKnobPluginAudioProcessor::MixingKnobPluginAudioProcessor()
@@ -17,12 +19,21 @@ MixingKnobPluginAudioProcessor::MixingKnobPluginAudioProcessor()
                        .withInput  ("Input",  AudioChannelSet::stereo(), true)
                        .withOutput ("Output", AudioChannelSet::stereo(), true)
                        ),
-	processorGraph(new AudioProcessorGraph())
+	impl(std::make_unique<GraphMixingImplementation>()),
+	//impl(std::make_unique<MixerMixingImplementation>()),
+	scannedDirectoriesMap(),
+	prescanFileMgr(MixingKnobPluginAudioProcessor::findPrescanFile(), scannedDirectoriesMap, *this)
 {
+	//AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "Using prescan file '" + prescanFile.getFullPathName() + "'", "Close");
+	usedDirectories = scannedDirectoriesMap.keys();
+	updateAvailablePluginsList();
+	sendChangeMessage();
 }
 
 MixingKnobPluginAudioProcessor::~MixingKnobPluginAudioProcessor()
 {
+	closePluginWindow();
+	closeUsedDirectoriesWindow();
 }
 
 //==============================================================================
@@ -74,44 +85,31 @@ int MixingKnobPluginAudioProcessor::getCurrentProgram()
     return 0;
 }
 
-void MixingKnobPluginAudioProcessor::setCurrentProgram (int index)
+void MixingKnobPluginAudioProcessor::setCurrentProgram (int /*index*/)
 {
 }
 
-const String MixingKnobPluginAudioProcessor::getProgramName (int index)
+const String MixingKnobPluginAudioProcessor::getProgramName (int /*index*/)
 {
     return {};
 }
 
-void MixingKnobPluginAudioProcessor::changeProgramName (int index, const String& newName)
+void MixingKnobPluginAudioProcessor::changeProgramName (int /*index*/, const String& /*newName*/)
 {
 }
 
 //==============================================================================
 void MixingKnobPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-	if (usedImpl == impls::GRAPH) {
-		processorGraph->setPlayConfigDetails(
-			getMainBusNumInputChannels(),
-			getMainBusNumOutputChannels(),
-			sampleRate, samplesPerBlock);
-		processorGraph->prepareToPlay(sampleRate, samplesPerBlock);
-
-		initializeGraph();
-	}
-	else {
-		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer prepareToPlay not impled", "Close");
-	}
+	impl->prepareToPlay(sampleRate, samplesPerBlock,
+		getMainBusNumInputChannels(),
+		getMainBusNumOutputChannels(),
+		getBlockSize());
 }
 
 void MixingKnobPluginAudioProcessor::releaseResources()
 {
-	if (usedImpl == impls::GRAPH) {
-		processorGraph->releaseResources();
-	}
-	else {
-		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer releaseResources not impled", "Close");
-	}
+	impl->releaseResources();
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -140,7 +138,6 @@ bool MixingKnobPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& 
 
 void MixingKnobPluginAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midiMessages)
 {
-    ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
@@ -153,18 +150,7 @@ void MixingKnobPluginAudioProcessor::processBlock (AudioBuffer<float>& buffer, M
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-	if (usedImpl == impls::GRAPH) {
-		processorGraph->processBlock(buffer, midiMessages);
-	}
-	else {
-		//AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer processBlock not impled", "Close");
-	}
+	impl->processBlock(buffer, midiMessages);
 }
 
 //==============================================================================
@@ -181,129 +167,244 @@ AudioProcessorEditor* MixingKnobPluginAudioProcessor::createEditor()
 //==============================================================================
 void MixingKnobPluginAudioProcessor::getStateInformation (MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
+	MemoryOutputStream mos{ destData, false };
+	//je treba ulozit
+	//jestli mam aktivni plugin
+	bool activePluginExists = ( innerPlugin != nullptr );
+	mos.writeBool(activePluginExists);
+	if (activePluginExists) {
+		//kterej plugin je aktivni
+		auto pluginDescription = innerPlugin->getPluginDescription();
+		auto pluginDescriptionXmlPtr = pluginDescription.createXml();
+		auto pluginDescriptionString = pluginDescriptionXmlPtr->createDocument(String());
+		mos.writeString(pluginDescriptionString);
+		//jaka je hodnota mixer knobu
+		auto sliderValue = impl->getGain();
+		mos.writeFloat(sliderValue);
+		//jestli ma aktivni plugin otevreny okno
+		bool isActivePluginWindowOpen = (innerPluginWindow != nullptr);
+		mos.writeBool(isActivePluginWindowOpen);
+	}
 }
 
 void MixingKnobPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
+	MemoryInputStream mis{ data, static_cast<size_t> (sizeInBytes), false };
+	bool activePluginExists = mis.readBool();
+	if (activePluginExists) {
+		auto pluginDescriptionString = mis.readString();
+		XmlDocument pluginDescriptionXmlDocument{ pluginDescriptionString };
+		auto pluginDescriptionXmlPtr = pluginDescriptionXmlDocument.getDocumentElement();
+		PluginDescription pluginDescription;
+		pluginDescription.loadFromXml(*pluginDescriptionXmlPtr);
+		loadPluginWithDescription(pluginDescription);
+
+		auto sliderValue = mis.readFloat();
+		impl->setGain(sliderValue);
+
+		bool isActivePluginWindowOpen = mis.readBool();
+		if (isActivePluginWindowOpen) {
+			openPluginWindow();
+		}
+	}
 }
 
 //==============================================================================
 // This creates new instances of the plugin..
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
+	File logFile = File::getSpecialLocation(File::SpecialLocationType::userHomeDirectory).getChildFile("Documents\\workspace\\JUCE_Plugins\\MixingKnobPlugin\\log.txt");
+	logFile.replaceWithText("");
+	FileLogger log(logFile, "");
+	Logger::setCurrentLogger(&log);
     return new MixingKnobPluginAudioProcessor();
 }
 
-void MixingKnobPluginAudioProcessor::scanDirectory(String path)
+/*void MixingKnobPluginAudioProcessor::scanDirectory(String path)
 {
 	//stalo by mozna za to resit, jestli je path jina nez predtim, a pokud ne, nedelat nic
 	knownPluginList.clearBlacklistedFiles();
-	VST3PluginFormat format;
 	PluginDirectoryScanner scanner{ knownPluginList, format, path, true, File{} };
 	String scannedFileName;
 	while (scanner.scanNextFile(true, scannedFileName));
-}
+}*/
 
-const KnownPluginList& MixingKnobPluginAudioProcessor::getKnownPluginList() 
+/*const KnownPluginList& MixingKnobPluginAudioProcessor::getKnownPluginList() 
 {
 	return knownPluginList;
+}*/
+
+MixingKnobPluginAudioProcessor::PluginsList
+MixingKnobPluginAudioProcessor::getAvailablePluginsList()
+{
+	return availablePluginsList;
 }
 
 void MixingKnobPluginAudioProcessor::loadPluginWithIndex(int index)
 {
-	if (usedImpl == impls::GRAPH) {
-		if (processorGraph->getNumNodes() > 0) {
-			AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Changing loaded plugin not supported", "Close");
-			return;
-		}
+	auto pluginDescription = availablePluginsList[index];
+	loadPluginWithDescription(pluginDescription);
+}
+
+void MixingKnobPluginAudioProcessor::loadPluginWithDescription(const PluginDescription& pluginDescription)
+{
+	//prisla zadost o loadnuti plugin, ktery uz loadnuty je; nedelej nic
+	if (innerPlugin && pluginDescription.isDuplicateOf(innerPlugin->getPluginDescription())) {
+		return;
 	}
-	else {
-		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer loadPluginWithIndex not impled", "Close");
+	//loadujeme novy plugin (jiny nez pripadny stavajici), je treba zavrit okno jiz loadnuteho pluginu
+	innerPluginWindow.reset(nullptr);
+	innerPlugin = format.createInstanceFromDescription(pluginDescription, 0, 0);
+	if (!innerPlugin) {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "CreatePlugin failed!", "Close");
+		return;
 	}
+
+	impl->takeOwnershipOfPluginAndUseIt(innerPlugin);
+}
+
+void MixingKnobPluginAudioProcessor::openPluginWindow()
+{
+	if (!innerPlugin) {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "No plugin is selected!", "Close");
+		return;
+	}
+	if (!innerPlugin->hasEditor()) {
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "Plugin has no editor!", "Close");
+		return;
+	}
+	innerPluginWindow.reset(new PluginWindow(innerPlugin, *this));
+}
+
+void MixingKnobPluginAudioProcessor::closePluginWindow()
+{
+	innerPluginWindow.reset(nullptr);
+}
+
+void MixingKnobPluginAudioProcessor::openUsedDirectoriesWindow()
+{
+	usedDirectoriesWindow.reset(new UsedDirectoriesWindow(*this));
+}
+
+void MixingKnobPluginAudioProcessor::closeUsedDirectoriesWindow()
+{
+	usedDirectoriesWindow.reset(nullptr);
 }
 
 void MixingKnobPluginAudioProcessor::setGain(double newGainValue)
 {
-	if (usedImpl == impls::GRAPH) {
-		if (newGainValue < 0) newGainValue = 0;
-		if (newGainValue > 100) newGainValue = 100;
-		double val = newGainValue / 50;
-		leftGain->setGain(val);
-		rightGain->setGain(2 - val);
+	impl->setGain(static_cast<float>(newGainValue));
+}
+
+double MixingKnobPluginAudioProcessor::getGain()
+{
+	return impl ? impl->getGain() : 50;
+}
+
+void MixingKnobPluginAudioProcessor::addUsedDirectory(File directory)
+{
+	if (!scannedDirectoriesMap.contains(directory)) {
+		scanDirectory(directory);
 	}
-	else {
-		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer setGain not impled", "Close");
+	usedDirectories.add(directory);
+	updateAvailablePluginsList();
+	sendChangeMessage();
+}
+
+void MixingKnobPluginAudioProcessor::removeUsedDirectories(Array<File> directories)
+{
+	for (auto dir : directories) {
+		usedDirectories.removeFirstMatchingValue(dir);
+	}
+	updateAvailablePluginsList();
+	sendChangeMessage();
+}
+
+void MixingKnobPluginAudioProcessor::scanDirectory(File directory)
+{
+	Label scanningLabel{ "", "Scanning directory '" + directory.getFullPathName() + "'" };
+	scanningLabel.setSize(500, 250);
+	DialogWindow::showDialog("Scanning", &scanningLabel, nullptr, LookAndFeel::getDefaultLookAndFeel().findColour(ResizableWindow::backgroundColourId), true);
+	AlertWindow scanningWindow{ "Scanning", "Scanning directory '" + directory.getFullPathName() + "'", AlertWindow::AlertIconType::InfoIcon };
+	KnownPluginList pathPluginList;
+	PluginDirectoryScanner scanner{ pathPluginList, format, directory.getFullPathName(), true, File{} };
+	String scannedFileName;
+	try {
+		while (scanner.scanNextFile(true, scannedFileName));
+	}
+	catch (std::exception& e) {}
+
+	scannedDirectoriesMap.set(directory, pathPluginList);
+	if (DialogWindow* dw = scanningLabel.findParentComponentOfClass<DialogWindow>()) {
+		dw->exitModalState(1234);
 	}
 }
 
-void MixingKnobPluginAudioProcessor::connect(NodeId in, NodeId out)
+void MixingKnobPluginAudioProcessor::rescanUsedDirectories()
 {
-	if (usedImpl == impls::GRAPH) {
-		for (int channel = 0; channel < getMainBusNumInputChannels(); ++channel) {
-			processorGraph->addConnection({
-				{ in, channel },
-				{ out, channel }
-				});
+	scannedDirectoriesMap.clear();
+
+	for (auto usedDir : usedDirectories) {
+		scanDirectory(usedDir);
+	}
+	updateAvailablePluginsList();
+	sendChangeMessage();
+}
+
+void MixingKnobPluginAudioProcessor::updateAvailablePluginsList()
+{
+	availablePluginsList = scannedDirectoriesMap.getPluginsListForDirectories(usedDirectories);
+}
+
+bool
+MixingKnobPluginAudioProcessor::isInnerPluginSet() {
+	return innerPlugin != nullptr;
+}
+
+PluginDescription
+MixingKnobPluginAudioProcessor::getInnerPluginDescription() {
+	return innerPlugin->getPluginDescription();
+}
+
+File MixingKnobPluginAudioProcessor::findPrescanFile()
+{
+	Logger::writeToLog("Find prescan file!");
+	for (File dir : getPrescanDirectories()) {
+		Logger::writeToLog("dir: " + dir.getFullPathName());
+		if (!dir.exists() || !dir.isDirectory()) {
+			/*AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error",
+				"Couldn't search for prescan.xml in '" + dir.getFullPathName() + "': Not an existing directory", "Close");*/
+			Logger::writeToLog("ERROR: not an existing directory");
+			continue;
 		}
+
+		//zjistit, jestli existuje prescan.xml
+		File file = dir.getChildFile("MixingKnobPlugin" + File::getSeparatorString() + "prescan.xml");
+		//pokud jo, vratit
+		if (file.exists()) {
+			Logger::writeToLog("Using existing file '" + file.getFullPathName() + "'");
+			return file;
+		}
+		//pokud ne, zkusit vytvorit a vratit
+		else if (file.create()) {
+			Logger::writeToLog("Using newly created '" + file.getFullPathName() + "'");
+			return file;
+		}
+		//file se nepovedlo vytvorit, pokracujeme nasledujicim adresarem
+		Logger::writeToLog("Couldn't create '" + file.getFullPathName() + "'");
 	}
-	else {
-		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer connect not impled", "Close");
-	}
+	return File();
 }
 
-void MixingKnobPluginAudioProcessor::initializeGraph()
+Array<File> MixingKnobPluginAudioProcessor::getPrescanDirectories()
 {
-	if (usedImpl != impls::GRAPH) {
-		AlertWindow::showMessageBox(AlertWindow::AlertIconType::WarningIcon, "Error", "Mixer should not use initializeGraph", "Close");
-		return;
-	}
-	processorGraph->clear();//pro jistotu a taky proto, abych to nemohl zapomenout, az budu implementovat zmenu vlozeneho pluginu
+	Array<File> result;
+	result.add(File::getSpecialLocation(File::SpecialLocationType::currentExecutableFile).getParentDirectory());
+	result.add(File::getSpecialLocation(File::SpecialLocationType::userHomeDirectory));
+	return result;
+}
 
-	//vytvorim input/output
-	audioInputNode = processorGraph->addNode(new GraphIO(GraphIO::audioInputNode), INPUT);
-	audioOutputNode = processorGraph->addNode(new GraphIO(GraphIO::audioOutputNode), OUTPUT);
-
-	auto left = std::make_unique<GainProcessor>();
-	left->setPlayConfigDetails(
-		getMainBusNumInputChannels(), getMainBusNumOutputChannels(),
-		getSampleRate(), getBlockSize());
-	processorGraph->addNode(left.get(), LEFT_GAIN);
-	leftGain = left.release();
-
-	auto right = std::make_unique<GainProcessor>();
-	right->setPlayConfigDetails(
-		getMainBusNumInputChannels(), getMainBusNumOutputChannels(),
-		getSampleRate(), getBlockSize());
-	processorGraph->addNode(right.get(), RIGHT_GAIN);
-	rightGain = right.release();
-
-	auto inner = std::make_unique<GainProcessor>();
-	inner->setGain(-100);
-	inner->setPlayConfigDetails(
-		getMainBusNumInputChannels(), getMainBusNumOutputChannels(),
-		getSampleRate(), getBlockSize());
-	processorGraph->addNode(inner.get(), INNER_PLUGIN);
-	innerPlugin = inner.release();
-
-	connect(INPUT, LEFT_GAIN);
-	connect(LEFT_GAIN, OUTPUT);
-	connect(INPUT, RIGHT_GAIN);
-	connect(RIGHT_GAIN, INNER_PLUGIN);
-	connect(INNER_PLUGIN, OUTPUT);
-
-
-	//vytvorit VST3PluginInstance
-
-	//1.faze: proted propojim input s outputem a smitec -- OK, tohle funguje
-	/*for (int channel = 0; channel < 2; ++channel) {
-		processorGraph->addConnection({
-			{ audioInputNode->nodeID, channel },
-			{ audioOutputNode->nodeID, channel }
-			});
-	}*/
+const Array<File>& MixingKnobPluginAudioProcessor::getUsedDirectories() const
+{
+	return usedDirectories;
 }

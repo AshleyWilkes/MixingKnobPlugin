@@ -11,12 +11,17 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
-#include "GainProcessor.h"
+#include "GraphMixingImplementation.h"
+#include "PluginWindow.h"
+#include "PrescanFileMgr.h"
+#include "UsedDirectoriesWindow.h"
+#include "ScannedDirectoriesMap.h"
 
 //==============================================================================
 /**
 */
-class MixingKnobPluginAudioProcessor : public AudioProcessor
+class MixingKnobPluginAudioProcessor : public AudioProcessor,
+	public ChangeBroadcaster
 {
 public:
 	//==============================================================================
@@ -57,9 +62,16 @@ public:
 	void setStateInformation(const void* data, int sizeInBytes) override;
 
 	//==============================================================================
-	void scanDirectory(String path);
-	const KnownPluginList& getKnownPluginList();
+	//void scanDirectory(String path);
+	//const KnownPluginList& getKnownPluginList();
+	using PluginsList = ScannedDirectoriesMap::PluginsList;
+	PluginsList getAvailablePluginsList();
 	void loadPluginWithIndex(int index);
+	void loadPluginWithDescription(const PluginDescription& descrition);
+	void openPluginWindow();
+	void closePluginWindow();
+	void openUsedDirectoriesWindow();
+	void closeUsedDirectoriesWindow();
 	//nezrejme.
 	//hodnota parametru je 0 - 100. reprezentuje procentualni silu druhe (delsi) vetve graphu
 	//jinak receno pro hodnotu 0 ma gain prave vetve vstup zcela ztlumit a gain leve vetve nejspis
@@ -71,30 +83,36 @@ public:
 	//prava cesta dostane 2 - leva cesta
 	//tyto hodnoty se v processBlocku pouzijou jako parametr metody AudioBuffer.applyGain
 	void setGain(double newGainValue);
+	double getGain();
 
+	void addUsedDirectory(File directory);
+	void removeUsedDirectories(Array<File> directories);
+	void scanDirectory(File directory);
+	void rescanUsedDirectories();
+	void updateAvailablePluginsList();
+	bool isInnerPluginSet();
+	PluginDescription getInnerPluginDescription();
+
+	static File findPrescanFile();
+	static Array<File> getPrescanDirectories();
+
+	const Array<File>& getUsedDirectories() const;
 private:
-	KnownPluginList knownPluginList;
-	enum class impls{ GRAPH, MIXER };
-	impls usedImpl{ impls::MIXER };
+	std::unique_ptr<MixingImplementation> impl;
 
-	using GraphIO = AudioProcessorGraph::AudioGraphIOProcessor;
-	using NodePtr = AudioProcessorGraph::Node::Ptr;
-	using NodeId = AudioProcessorGraph::NodeID;
-	std::unique_ptr<AudioProcessorGraph> processorGraph;
-	NodePtr audioInputNode;
-	NodePtr audioOutputNode;
-	GainProcessor* leftGain;
-	GainProcessor* rightGain;
-	AudioProcessor* innerPlugin;
+	VST3PluginFormat format;
+	//HashMap<String, Array<PluginDescription>> knownPluginsMap;
+	ScannedDirectoriesMap scannedDirectoriesMap;
+	//KnownPluginList knownPluginList;
+	PluginsList availablePluginsList;
+	AudioPluginInstance* innerPlugin{ nullptr };
+	std::unique_ptr<PluginWindow> innerPluginWindow;
 
-	NodeId INPUT{ 100 };
-	NodeId OUTPUT{ 101 };
-	NodeId LEFT_GAIN{ 102 };
-	NodeId RIGHT_GAIN{ 103 };
-	NodeId INNER_PLUGIN{ 104 };
+	//StringArray usedDirectories{};
+	Array<File> usedDirectories;
+	std::unique_ptr<UsedDirectoriesWindow> usedDirectoriesWindow;
 
-	void initializeGraph();
-	void connect(NodeId in, NodeId out);
+	PrescanFileMgr prescanFileMgr;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixingKnobPluginAudioProcessor)

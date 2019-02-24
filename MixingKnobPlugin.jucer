@@ -3,9 +3,40 @@
 <JUCERPROJECT id="wVUmCM" name="MixingKnobPlugin" projectType="audioplug" jucerVersion="5.4.1">
   <MAINGROUP id="FiOfrh" name="MixingKnobPlugin">
     <GROUP id="{82C489BB-F349-3C76-7CA0-508A241D78C9}" name="Source">
-      <FILE id="ePWgFo" name="GainProcessor.cpp" compile="1" resource="0"
-            file="Source/GainProcessor.cpp"/>
-      <FILE id="rW9wdP" name="GainProcessor.h" compile="0" resource="0" file="Source/GainProcessor.h"/>
+      <GROUP id="{9927E49D-CC1D-9193-59B6-BA2429067842}" name="Implementations">
+        <FILE id="s5H2tL" name="GraphMixingImplementation.cpp" compile="1"
+              resource="0" file="Source/GraphMixingImplementation.cpp"/>
+        <FILE id="vLTTyH" name="GraphMixingImplementation.h" compile="0" resource="0"
+              file="Source/GraphMixingImplementation.h"/>
+        <FILE id="dU1qio" name="MixerMixingImplementation.h" compile="0" resource="0"
+              file="Source/MixerMixingImplementation.h"/>
+        <FILE id="QYeVlM" name="MixerMixingImplementation.cpp" compile="1"
+              resource="0" file="Source/MixerMixingImplementation.cpp"/>
+      </GROUP>
+      <GROUP id="{D989F657-E472-9C04-3E5F-B16D665B8C34}" name="Util">
+        <FILE id="uWrnoT" name="PrescanFileMgr.cpp" compile="1" resource="0"
+              file="Source/PrescanFileMgr.cpp"/>
+        <FILE id="uZJ49u" name="PrescanFileMgr.h" compile="0" resource="0"
+              file="Source/PrescanFileMgr.h"/>
+        <FILE id="YzKk6o" name="ScannedDirectoriesMap.cpp" compile="1" resource="0"
+              file="Source/ScannedDirectoriesMap.cpp"/>
+        <FILE id="U9hp0L" name="ScannedDirectoriesMap.h" compile="0" resource="0"
+              file="Source/ScannedDirectoriesMap.h"/>
+        <FILE id="rW9wdP" name="GainProcessor.h" compile="0" resource="0" file="Source/GainProcessor.h"/>
+        <FILE id="ePWgFo" name="GainProcessor.cpp" compile="1" resource="0"
+              file="Source/GainProcessor.cpp"/>
+      </GROUP>
+      <GROUP id="{46D316D6-735C-FA6A-767D-C92881528417}" name="SubWindows">
+        <FILE id="K6PXnQ" name="PluginWindow.cpp" compile="1" resource="0"
+              file="Source/PluginWindow.cpp"/>
+        <FILE id="YaOg4D" name="PluginWindow.h" compile="0" resource="0" file="Source/PluginWindow.h"/>
+        <FILE id="k0yrBw" name="UsedDirectoriesWindow.cpp" compile="1" resource="0"
+              file="Source/UsedDirectoriesWindow.cpp"/>
+        <FILE id="U5BzqE" name="UsedDirectoriesWindow.h" compile="0" resource="0"
+              file="Source/UsedDirectoriesWindow.h"/>
+      </GROUP>
+      <FILE id="SbX5BL" name="MixingImplementation.h" compile="0" resource="0"
+            file="Source/MixingImplementation.h"/>
       <FILE id="wpMdOq" name="MixingKnobPluginProcessor.cpp" compile="1"
             resource="0" file="Source/MixingKnobPluginProcessor.cpp"/>
       <FILE id="UJgAOD" name="MixingKnobPluginProcessor.h" compile="0" resource="0"
