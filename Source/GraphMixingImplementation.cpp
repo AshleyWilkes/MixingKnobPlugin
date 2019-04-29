@@ -28,9 +28,11 @@ void GraphMixingImplementation::releaseResources() {
 }
 
 void GraphMixingImplementation::processBlock(AudioBuffer<float>& buffer, MidiBuffer& midiMessages) {
-	leftGain->setGain(1 - gainValue);
-	rightGain->setGain(gainValue);
-	processorGraph->processBlock(buffer, midiMessages);
+	if (innerPlugin) {
+		leftGain->setGain(1 - gainValue);
+		rightGain->setGain(gainValue);
+		processorGraph->processBlock(buffer, midiMessages);
+	}
 }
 
 void GraphMixingImplementation::setGain(float newGainValue) {
@@ -67,7 +69,6 @@ void GraphMixingImplementation::initializeGraph(double sampleRate, int samplesPe
 		numInputChannels, numOutputChannels,
 		sampleRate, blockSize);
 
-							//vytvorim input/output
 	audioInputNode = processorGraph->addNode(new GraphIO(GraphIO::audioInputNode), INPUT);
 	audioOutputNode = processorGraph->addNode(new GraphIO(GraphIO::audioOutputNode), OUTPUT);
 

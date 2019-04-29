@@ -11,6 +11,14 @@
 #include "PluginWindow.h"
 #include "MixingKnobPluginProcessor.h"
 
+//inu chci to resit tak, ze se kazdeho pluginu budu na editor ptat nejvys jednou
+//tj. musim si vracenou hodnotu zapamatovat, aby bylo mozne editor znovu otevrit,
+//i kdyz uz byl jednou zavren
+
+//vidim dve moznosti: ukladat primo ten editor
+//nebo ukladat cele okno (instanci zdehle PluginWindow)
+//budiz to primo editor, okno vytvarejme vzdy znovu
+
 PluginWindow::PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcessor& parent) : 
 	DocumentWindow(plugin->getName(),
 		LookAndFeel::getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
@@ -19,7 +27,7 @@ PluginWindow::PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcesso
 {
 	setSize(400, 300);
 
-	if (auto* ui = plugin->createEditor()) {
+	if (auto* ui = plugin->createEditorIfNeeded()) {
 		setContentNonOwned(ui, true);
 	}
 

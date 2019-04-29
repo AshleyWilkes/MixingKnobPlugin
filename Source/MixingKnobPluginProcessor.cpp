@@ -167,6 +167,8 @@ AudioProcessorEditor* MixingKnobPluginAudioProcessor::createEditor()
 //==============================================================================
 void MixingKnobPluginAudioProcessor::getStateInformation (MemoryBlock& destData)
 {
+	AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error",
+		"Saving state info", "Close");
 	MemoryOutputStream mos{ destData, false };
 	//je treba ulozit
 	//jestli mam aktivni plugin
@@ -181,14 +183,20 @@ void MixingKnobPluginAudioProcessor::getStateInformation (MemoryBlock& destData)
 		//jaka je hodnota mixer knobu
 		auto sliderValue = impl->getGain();
 		mos.writeFloat(sliderValue);
+
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error",
+			"Saved slider value " + std::to_string(sliderValue), "Close");
+
 		//jestli ma aktivni plugin otevreny okno
-		bool isActivePluginWindowOpen = (innerPluginWindow != nullptr);
-		mos.writeBool(isActivePluginWindowOpen);
+		//bool isActivePluginWindowOpen = (innerPluginWindow != nullptr);
+		//mos.writeBool(isActivePluginWindowOpen);
 	}
 }
 
 void MixingKnobPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
+	AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error",
+		"Loading state info", "Close");
 	MemoryInputStream mis{ data, static_cast<size_t> (sizeInBytes), false };
 	bool activePluginExists = mis.readBool();
 	if (activePluginExists) {
@@ -202,10 +210,15 @@ void MixingKnobPluginAudioProcessor::setStateInformation (const void* data, int 
 		auto sliderValue = mis.readFloat();
 		impl->setGain(sliderValue);
 
-		bool isActivePluginWindowOpen = mis.readBool();
+		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error",
+			"Loaded slider value " + std::to_string(sliderValue), "Close");
+
+		sendChangeMessage();
+
+		/*bool isActivePluginWindowOpen = mis.readBool();
 		if (isActivePluginWindowOpen) {
 			openPluginWindow();
-		}
+		}*/
 	}
 }
 
@@ -254,7 +267,12 @@ void MixingKnobPluginAudioProcessor::loadPluginWithDescription(const PluginDescr
 	}
 	//loadujeme novy plugin (jiny nez pripadny stavajici), je treba zavrit okno jiz loadnuteho pluginu
 	innerPluginWindow.reset(nullptr);
-	innerPlugin = format.createInstanceFromDescription(pluginDescription, 0, 0);
+
+	try {
+		innerPlugin = format.createInstanceFromDescription(pluginDescription, getSampleRate(), 0);
+	}
+	catch (const std::exception &e) {}
+
 	if (!innerPlugin) {
 		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "CreatePlugin failed!", "Close");
 		return;
@@ -275,7 +293,7 @@ void MixingKnobPluginAudioProcessor::openPluginWindow()
 	}
 	innerPluginWindow.reset(new PluginWindow(innerPlugin, *this));
 }
-
+	
 void MixingKnobPluginAudioProcessor::closePluginWindow()
 {
 	innerPluginWindow.reset(nullptr);
