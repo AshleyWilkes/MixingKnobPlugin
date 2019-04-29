@@ -19,7 +19,7 @@
 //nebo ukladat cele okno (instanci zdehle PluginWindow)
 //budiz to primo editor, okno vytvarejme vzdy znovu
 
-PluginWindow::PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcessor& parent) : 
+/*PluginWindow::PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcessor& parent) : 
 	DocumentWindow(plugin->getName(),
 		LookAndFeel::getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
 		DocumentWindow::minimiseButton | DocumentWindow::closeButton),
@@ -31,6 +31,18 @@ PluginWindow::PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcesso
 		setContentNonOwned(ui, true);
 	}
 
+	setTopLeftPosition(100, 100);
+	setVisible(true);
+}*/
+
+PluginWindow::PluginWindow(String pluginName, Component* pluginEditor, MixingKnobPluginAudioProcessor& parent) : 
+	DocumentWindow(pluginName,
+		LookAndFeel::getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
+		DocumentWindow::minimiseButton | DocumentWindow::closeButton),
+	parent_{parent}
+{
+	setSize(400, 300);
+  setContentNonOwned(pluginEditor, true);
 	setTopLeftPosition(100, 100);
 	setVisible(true);
 }

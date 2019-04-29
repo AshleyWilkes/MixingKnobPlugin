@@ -15,7 +15,8 @@ class MixingKnobPluginAudioProcessor;
 
 class PluginWindow : public DocumentWindow {
 public:
-	PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcessor& parent);
+	//PluginWindow(AudioProcessor* plugin, MixingKnobPluginAudioProcessor& parent);
+	PluginWindow(String pluginName, Component* pluginEditor, MixingKnobPluginAudioProcessor& parent);
 	~PluginWindow();
 
 	void closeButtonPressed() override;

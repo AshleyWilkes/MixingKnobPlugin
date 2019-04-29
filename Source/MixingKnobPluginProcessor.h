@@ -70,6 +70,7 @@ public:
 	void loadPluginWithDescription(const PluginDescription& descrition);
 	void openPluginWindow();
 	void closePluginWindow();
+  Component* getPluginEditor(AudioPluginInstance* plugin);
 	void openUsedDirectoriesWindow();
 	void closeUsedDirectoriesWindow();
 	//nezrejme.
@@ -107,6 +108,22 @@ private:
 	PluginsList availablePluginsList;
 	AudioPluginInstance* innerPlugin{ nullptr };
 	std::unique_ptr<PluginWindow> innerPluginWindow;
+
+  //Ok, mejme pro zacatek mapu <int, editor>, ktera mapuje plugin->getPluginDescription()->uid
+  //na Component*y plugin->createEditorIfNeeded().
+  //
+  //Dle dokumentace by uid (klic mapy) mel byt unikatni identifikator, potencialne
+  //konfliktni s uid jineho pluginu, pokud ten jiny plugin ma jiny format. Unikatni
+  //identifikator by mel jit zjistit pomoci
+  //plugin->getPluginDescription()->createIdentifierString(), ale ten je zase ve formatu
+  //String, ktery nema operator<(), takze nejde pouzit jako klic. Jednoduche 100% funckni reseni
+  //nevidim, zkusme tedy takto. !!Ha, jednoduche funkcni reseni by mohlo byt v pouziti
+  //juce::HashMap!!
+  //
+  //Hodnota Componenty z createEditorIfNeeded() je taky potencialne nebezpecna, dokumentace
+  //k teto a pribuznym metodam je zmatena. ?Vznest dotaz ve foru? Ale reportovane chovani
+  //nenasvedcuje tomu, ze by s vytvarenim editoru timto zpusobem byl nejaky problem.
+  std::map<int, std::unique_ptr<Component>> createdEditors;
 
 	//StringArray usedDirectories{};
 	Array<File> usedDirectories;

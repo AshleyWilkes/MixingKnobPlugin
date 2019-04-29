@@ -291,12 +291,36 @@ void MixingKnobPluginAudioProcessor::openPluginWindow()
 		AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "Plugin has no editor!", "Close");
 		return;
 	}
-	innerPluginWindow.reset(new PluginWindow(innerPlugin, *this));
+	//innerPluginWindow.reset(new PluginWindow(innerPlugin, *this));
+  auto pluginName = innerPlugin->getName();
+  auto* pluginEditor = getPluginEditor(innerPlugin);
+  if (pluginEditor != nullptr) {
+	  innerPluginWindow.reset(new PluginWindow(pluginName, pluginEditor, *this));
+  }
 }
 	
 void MixingKnobPluginAudioProcessor::closePluginWindow()
 {
 	innerPluginWindow.reset(nullptr);
+}
+
+Component* getPluginEditor(AudioPluginInstance* plugin)
+{
+  int uid = plugin->getPluginDescription()->uid;
+  auto editorUniquePtr = createdEditors.find(uid);
+  if (editorUniquePtr == createdEditors.end()) {
+    bool succ;
+    std::unique_ptr<Component> newEditorPtr{ plugin->createEditorIfNeeded() };
+    if (newEditorPtr.get() == nullptr) {
+      AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "Plugin editor could not be opened!", "Close");
+      return nullptr;
+    }
+    std::tie(editorUniquePtr, succ) = createdEditors.insert({ uid, newEditorPtr });
+    if (! succ) {
+      AlertWindow::showMessageBox(AlertWindow::AlertIconType::InfoIcon, "Error", "Plugin editor could not be stored!", "Close");
+    }
+  }
+  return editorUniquePtr->second.get();
 }
 
 void MixingKnobPluginAudioProcessor::openUsedDirectoriesWindow()
